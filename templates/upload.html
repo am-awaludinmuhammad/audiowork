@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %} Split Mp3 {% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Upload MP3 to Split</h3>
+                </div>
+                <div class="card-body">
+                    <form action="{% url 'upload' %}" method="POST" id="uploadForm" enctype="multipart/form-data" class="mb-4">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="mp3file" class="form-label">Choose MP3 File</label>
+                            <input class="form-control" type="file" id="mp3file" name="mp3file" accept=".mp3" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Split and Download</button>
+                    </form>
+                    <div id="status"></div>
+                    <div id="results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block scripts %}
+<script>
+   $('#uploadForm').on('submit', async function(event) {
+        event.preventDefault();
+        const $statusDiv = $('#status');
+        const $resultsDiv = $('#results');
+
+        $resultsDiv.empty();
+        $statusDiv.empty();   
+
+        $statusDiv.html(spinner());
+
+        const formData = new FormData(this);
+        const response = await fetch(this.action, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            
+            $resultsDiv.html(`
+                <div class="alert alert-success" role="alert">
+                    ${data.message}
+                </div>
+                <div>Total Chunks: ${data.total_chunks}</div>
+                <div class="mb-4">Remaining Duration: ${data.remaining_duration} seconds</div>
+            `);
+
+            const $result = $(`<div class="list-group"></div>`)
+            data.download_links.forEach((links, index) => {
+                downloadFile(links.download_link, links.filename);
+                $result.append(`
+                    <a href="${links.download_link}" class="download-chunk list-group-item list-group-item-action">Download Chunk ${index + 1}</a>
+                `)
+            });
+            $resultsDiv.append($result);
+            toastr.success('Download started successfully!')
+        } else {
+            const errorData = await response.json();
+            $resultsDiv.html(`<p style="color: red;">Error: ${errorData.error}</p>`);
+        }
+
+        $statusDiv.html('');
+    });
+</script>
+{% endblock %}
