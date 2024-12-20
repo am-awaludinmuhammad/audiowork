@@ -6,10 +6,15 @@ from django.http import JsonResponse
 from pydub import AudioSegment
 from django.urls import reverse
 from wsgiref.util import FileWrapper
+from ..utils import chunk_mp3_file
 
 def upload_mp3(request):
     if request.method == 'POST' and request.FILES.get('mp3file'):
         mp3_file = request.FILES['mp3file']
+        data = chunk_mp3_file(mp3_file)
+        
+        return JsonResponse(data)
+        
         temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp')
         os.makedirs(temp_dir, exist_ok=True)
         filename = mp3_file.name

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %} Final Destination {% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Upload MP3</h3>
+                </div>
+                <div class="card-body">
+                    <form action="{% url 'generate_attachment' %}" method="POST" id="uploadForm" enctype="multipart/form-data" class="mb-4">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="mp3file" class="form-label">Choose MP3 File</label>
+                            <input class="form-control" type="file" id="mp3file" name="mp3file" accept=".mp3" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Process</button>
+                    </form>
+
+                    <div class="progress-container mb-4" style="display: none;">
+                        <div class="progress" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated progress-bar overflow-visible text-light" style="width: 0%"></div>
+                        </div>
+                        <div id="stageContainer" style="display: none;">
+                            <small class="text-secondary" id="stage"></small>
+                        </div>
+                        <div id="elapsedTime" style="display: none;">
+                            <small class="text-secondary">Elapsed Time: <span class="elapsed-time">00:00</span></small>
+                        </div>
+                    </div>
+                    
+                    <div id="status"></div>
+                    <div id="results"></div>
+                      
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block scripts %}
+<script>
+    const resetForm = () => {
+        $('.progress-container').html(`
+            <div class="progress" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar progress-bar-striped progress-bar-animated progress-bar overflow-visible text-light" style="width: 0%"></div>
+            </div>
+            <div id="stageContainer" style="display: none;">
+                <small class="text-secondary" id="stage"></small>
+            </div>
+            <div id="elapsedTime" style="display: none;">
+                <small class="text-secondary">Elapsed Time: <span class="elapsed-time">00:00</span></small>
+            </div>
+        `)
+    }
+    
+    const setProgress = (value) => {
+        value = Math.min(Math.max(value, 0), 100);
+        
+        const $progressBar = $('.progress-container .progress-bar');
+        
+        $progressBar.css('width', `${value}%`);
+        $progressBar.text(`${value}%`);
+        
+        $progressBar.attr('aria-valuenow', value);
+
+        if (value == 100) {
+            $progressBar.addClass('bg-success');
+            
+            $progressBar.removeClass('progress-bar-striped');
+            $progressBar.removeClass('progress-bar-animated');
+        }
+
+    }
+
+    let elapsedInterval;
+    const updateElapsedTime = () => {
+        let startTime = Date.now();
+        
+        $('#elapsedTime').show();
+        $('.elapsed-time').empty();
+        $('.elapsed-time').text('00:00');
+        
+        if (elapsedInterval) {
+            clearInterval(elapsedInterval);
+        }
+        
+        elapsedInterval = setInterval(() => {
+            var currentTime = Date.now();
+            var elapsedTime = Math.floor((currentTime - startTime) / 1000);
+            
+            var minutes = Math.floor(elapsedTime / 60);
+            var seconds = elapsedTime % 60;
+            
+            var formattedTime = ("0" + minutes).slice(-2) + ":" + ("0" + seconds).slice(-2);
+            
+            $('.elapsed-time').text(formattedTime);
+        }, 1000);
+    };
+
+    let loadingInterval;
+    const loadingProcessing = () => {
+        let dots = 1;
+        $('#stageContainer').show();
+        $('#stage').text('Processing');
+        
+        if (loadingInterval) {
+            clearInterval(loadingInterval);
+        }
+    
+        loadingInterval = setInterval(() => {
+            if (dots < 6) {
+                $('#stage').text('Processing ' + '.'.repeat(dots));
+                dots++;
+            } else {
+                dots = 1;
+                $('#stage').text('Processing ' + '.'.repeat(dots));
+            }
+        }, 500);
+    };
+    
+   $('#uploadForm').on('submit', async function(event) {
+        event.preventDefault();
+        resetForm()
+        const $statusDiv = $('#status');
+        const $resultsDiv = $('#results');
+        $('.progress-container').show()
+
+        $resultsDiv.empty();
+        $statusDiv.empty();   
+
+        updateElapsedTime()
+        loadingProcessing()
+        $statusDiv.html(spinner());
+
+        const formData = new FormData(this);
+        const response = await fetch(this.action, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.ok) {
+            $statusDiv.empty();
+
+            const data = await response.json();
+            setProgress(data.progress)
+            return false
+
+            const obtainToken = await fetch(data.next_url, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (obtainToken.ok) {
+                const tokenData = await obtainToken.json()
+                setProgress(tokenData.progress)
+                return false
+
+                const finalStep = await fetch(tokenData.next_url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (finalStep.ok) {
+                    const finalData = await finalStep.json()
+                    setProgress(finalData.progress)
+                    clearInterval(elapsedInterval);
+                    clearInterval(loadingInterval);
+                    $('#stage').text('Processed');
+                }
+            }
+        } else {
+            const errorData = await response.json();
+            $resultsDiv.html(`<p style="color: red;">Error: ${errorData.error}</p>`);
+            $('.progress-container').hide()
+        }
+
+        $statusDiv.html('');
+    });
+</script>
+{% endblock %}
